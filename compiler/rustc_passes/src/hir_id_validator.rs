@@ -71,6 +71,9 @@ impl<'a, 'hir> HirIdValidator<'a, 'hir> {
             .max()
             .expect("owning item has no entry");
 
+        // `HirIds` should be a contiguous sequence starting at 0.
+        // By pigeon-hole principle, this is true if and only if the maximum
+        // encountered ID is equal to the maximum possible address.
         if max != self.hir_ids_seen.len() - 1 {
             let hir = self.tcx.hir();
             let pretty_owner = hir.def_path(owner.def_id).to_string_no_crate_verbose();
@@ -100,6 +103,7 @@ impl<'a, 'hir> HirIdValidator<'a, 'hir> {
         let Some(owner) = self.owner else { return };
         let def_parent = self.tcx.local_parent(id);
         let def_parent_hir_id = self.tcx.local_def_id_to_hir_id(def_parent);
+
         if def_parent_hir_id.owner != owner {
             self.error(|| {
                 format!(
@@ -154,6 +158,20 @@ impl<'a, 'hir> intravisit::Visitor<'hir> for HirIdValidator<'a, 'hir> {
                     self.tcx.hir().def_path(owner.def_id).to_string_no_crate_verbose()
                 )
             });
+        }
+
+        let owner_local_id: ItemLocalId = self.tcx.local_def_id_to_hir_id(owner.def_id).local_id;
+        if hir_id.local_id <= owner_local_id {
+            self.error(|| {
+                format!(
+                    "HirIdValidator: The ID of {}  is less than or equal to the ID of its owner",
+                    // "HirIdValidator: The ID of {} ({}) is less than or equal to the ID of its owner ({})",
+                    self.tcx.hir().node_to_string(hir_id),
+                    // hir_id.local_id,
+                    // owner_local_id
+                )
+            });
+            panic!("ID Traversal Order");
         }
 
         self.hir_ids_seen.insert(hir_id.local_id);
